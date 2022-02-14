@@ -1,12 +1,11 @@
+import enum
 import logging
-import os
 import sys
-import threading
+import time
+from dataclasses import dataclass
+from datetime import datetime
 from queue import Queue
 from threading import Thread
-
-import time
-from datetime import datetime
 
 from tidelight.LocationData import TideDataFetcher
 from tidelight.threads.Command import Command, CommandType
@@ -17,12 +16,10 @@ class TideDataFetchThread(Thread):
     """Thread responsible for determining when new tide data must be fetched and fetching the data"""
     is_stopping = False
 
-    def __init__(self, name: str, command_queue: Queue, data_fetcher: TideDataFetcher,
-                 xml_lock: threading.Lock):
+    def __init__(self, name: str, command_queue: Queue, data_fetcher: TideDataFetcher):
         super().__init__(name=name)
         self.command_queue = command_queue
         self.data_fetcher = data_fetcher
-        self.xml_lock = xml_lock
         self.handlers = {
             CommandType.STOP: self.stop
         }
@@ -37,17 +34,8 @@ class TideDataFetchThread(Thread):
                         next_run = get_time_in_30s()
                     else:
                         next_run = get_next_api_run()
-
-                        try:
-                            with self.xml_lock:
-                                with open("download.xml", "w+") as xml_file:
-                                    xml_file.write(response)
-                                if os.path.exists("offline.xml"):
-                                    os.remove("offline.xml")
-                                os.rename("download.xml", "offline.xml")
-                        except Exception as e:
-                            logging.exception(e)
-
+                        reply = TideDataFetchCommand(TideDataFetchCommand.CommandType.NEW_TIDE_DATA, response)
+                        self.command_queue.put(reply)
                 except Exception as e:
                     logging.exception("Error occured: %s", sys.exc_info()[0])
                     logging.info('Location release: 30s unknown error')
@@ -64,3 +52,12 @@ class TideDataFetchThread(Thread):
 
     def handle_command(self, command: Command):
         self.handlers[command.command_type](command.payload)
+
+
+@dataclass
+class TideDataFetchCommand:
+    class CommandType(enum.Enum):
+        NEW_TIDE_DATA = enum.auto
+
+    command_type: CommandType
+    payload: ...

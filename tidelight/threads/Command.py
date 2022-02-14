@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 class CommandType(enum.Enum):
     STOP = enum.auto
+    NEW_XML = enum.auto
 
 
 @dataclass
